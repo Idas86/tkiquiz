@@ -1,6 +1,26 @@
 /**
     @namespace H5P
 */
+
+if (typeof H5P.XAPIEvent !== "function") {
+  H5P.XAPIEvent = function(statement) {
+    this.data = { statement: statement };
+  };
+  H5P.XAPIEvent.prototype.getVerb = function() {
+    return this.data.statement.verb.display["en-US"].toLowerCase();
+  };
+  H5P.XAPIEvent.prototype.getVerifiedStatementValue = function(pathArray) {
+    var value = this.data.statement;
+    pathArray.forEach(function(key) {
+      value = (value) ? value[key] : undefined;
+    });
+    return value;
+  };
+  H5P.XAPIEvent.prototype.setResult = function(resultData) {
+    this.data.statement.result = resultData;
+  };
+}
+
 var H5P = H5P || {};
 
 
@@ -1126,11 +1146,23 @@ H5P.TKIQuiz = (function ($, EventDispatcher) {
       };
     
       if (typeof H5P.XAPIEvent === "function") {
-        return new H5P.XAPIEvent(statement);
+        var xAPIEvent = new H5P.XAPIEvent(statement);
+        // Assicuriamoci che l'istanza abbia i metodi richiesti
+        if (typeof xAPIEvent.getVerb !== "function") {
+          xAPIEvent.getVerb = H5P.XAPIEvent.prototype.getVerb;
+        }
+        if (typeof xAPIEvent.getVerifiedStatementValue !== "function") {
+          xAPIEvent.getVerifiedStatementValue = H5P.XAPIEvent.prototype.getVerifiedStatementValue;
+        }
+        if (typeof xAPIEvent.setResult !== "function") {
+          xAPIEvent.setResult = H5P.XAPIEvent.prototype.setResult;
+        }
+        return xAPIEvent;
       } else {
         return { data: { statement: statement } };
       }
-    };          
+      
+    };    
 
     /**
       Event handler for the personality quiz start event. Makes the
@@ -1183,40 +1215,43 @@ H5P.TKIQuiz = (function ($, EventDispatcher) {
         rawScores[personality.name] = personality.count;
       });
       
-      // Calcola il punteggio globale.
-      // Ad esempio, la somma dei punteggi delle cinque personalità.
+      // Calcola il punteggio globale: la somma dei punteggi delle personalità
       var finalScore = 0;
       self.personalities.forEach(function(personality) {
         finalScore += personality.count;
       });
       
-      // ----- Invio dell'evento xAPI (già presente) -----
+      // Salva i dati nell'istanza affinché addResponseToXAPI li possa usare
+      self.globalScore = finalScore;
+      self.rawScores = rawScores;
+      
+      // Crea lo statement xAPI con il verbo 'completed'
       var xAPIEvent = self.createXAPIEventTemplate('completed');
       
+      // Imposta il risultato; se esiste setResult lo usiamo, altrimenti usiamo il ramo else
       if (typeof xAPIEvent.setResult === 'function') {
         xAPIEvent.setResult({
           score: { raw: finalScore, min: 0, max: 30 },
           extensions: { "https://tuo-dominio.org/extensions/raw-scores": rawScores }
         });
-      }
-      else if (xAPIEvent.data && xAPIEvent.data.statement) {
+      } else if (xAPIEvent.data && xAPIEvent.data.statement) {
         xAPIEvent.data.statement.result = {
           score: { raw: finalScore, min: 0, max: 30 },
           extensions: { "https://tuo-dominio.org/extensions/raw-scores": rawScores }
         };
       }
       
-      //console.log('xAPI Event2:', xAPIEvent);
-      self.trigger(xAPIEvent);
-      // ----- Fine invio xAPI -----
+      // Arricchiamo lo statement con le informazioni della domanda e della risposta
+      self.addQuestionToXAPI(xAPIEvent);
+      self.addResponseToXAPI(xAPIEvent);
       
-      // Triggera l'evento standard "attemptSubmitted" con il punteggio globale
-      self.trigger('attemptSubmitted', { score: finalScore });
+      // Triggeriamo lo statement xAPI usando H5P.trigger per assicurare che Moodle lo catturi
+      H5P.trigger(self, 'xAPI', xAPIEvent);
       
       if (animation && self.resultAnimation === 'fade-in') {
         self.$result.addClass(prefix('fade-in'));
       }
-    });      
+    });                  
 
     /**
       Event handler for the animation end event for the wheel of
@@ -1243,6 +1278,49 @@ H5P.TKIQuiz = (function ($, EventDispatcher) {
 
   TKIQuiz.prototype = Object.create(EventDispatcher);
   TKIQuiz.prototype.constructor = TKIQuiz;
+
+  TKIQuiz.prototype.getxAPIDefinition = function () {
+    return {
+      name: { "en-US": "TKI Quiz" },
+      description: { "en-US": $('<div>' + "A personality quiz based on the Thomas-Kilmann Conflict Mode Instrument." + '</div>').text() },
+      type: 'http://adlnet.gov/expapi/activities/cmi.interaction',
+      interactionType: 'choice' // o un tipo specifico se preferisci
+      // Puoi aggiungere altre proprietà se necessario
+    };
+  };
+
+  TKIQuiz.prototype.addQuestionToXAPI = function (xAPIEvent) {
+    var definition;
+    if (typeof xAPIEvent.getVerifiedStatementValue === 'function') {
+      definition = xAPIEvent.getVerifiedStatementValue(['object', 'definition']);
+    }
+    // Se definition risulta null, proviamo ad accedere direttamente alla struttura:
+    if (!definition && xAPIEvent.data && xAPIEvent.data.statement && xAPIEvent.data.statement.object) {
+      if (!xAPIEvent.data.statement.object.definition) {
+        xAPIEvent.data.statement.object.definition = {};
+      }
+      definition = xAPIEvent.data.statement.object.definition;
+    }
+    // Se ancora non esiste, lo creiamo localmente
+    if (!definition) {
+      definition = {};
+    }
+    $.extend(definition, this.getxAPIDefinition());
+  };  
+  
+  TKIQuiz.prototype.addResponseToXAPI = function (xAPIEvent) {
+    var resultData = {
+      score: { raw: this.globalScore, min: 0, max: 30 },
+      extensions: { "https://tuo-dominio.org/extensions/raw-scores": this.rawScores }
+    };
+  
+    if (typeof xAPIEvent.setResult === 'function') {
+      xAPIEvent.setResult(resultData);
+    }
+    else if (xAPIEvent.data && xAPIEvent.data.statement) {
+      xAPIEvent.data.statement.result = resultData;
+    }
+  };  
 
   return TKIQuiz;
 })(H5P.jQuery, H5P.EventDispatcher);
