@@ -1,0 +1,115 @@
+{
+  "titleScreen": {
+    "title": {
+      "display": true,
+      "text": "Conflict Mode - Test"
+    },
+    "image": {},
+    "skip": false
+  },
+  "resultScreen": {
+    "animation": "none",
+    "displayTitle": true,
+    "displayDescription": true,
+    "imagePosition": "background"
+  },
+  "personalities": [
+    {
+      "image": {},
+      "name": "Competing",
+      "description": "Competing is assertive and uncooperative, a power-oriented mode. When competing, an individual pursues his or her own concerns at the other person’s expense, using whatever power seems appropriate to win his or her position. Competing might mean standing up for your rights, defending a position you believe is correct, or simply trying to win."
+    },
+    {
+      "image": {},
+      "name": "Collaborating",
+      "description": "Collaborating is both assertive and cooperative. When collaborating, an individual attempts to work with the other person to find a solution that fully satisfies the concerns of both. It involves digging into an issue to identify the underlying concerns of the two individuals and to find an alternative that meets both sets of concerns. Collaborating between two persons might take the form of exploring a disagreement to learn from each other’s insights, resolving some condition that would otherwise have them competing for resources, or confronting and trying to find a creative solution to an interpersonal problem."
+    },
+    {
+      "image": {},
+      "name": "Compromising",
+      "description": "Compromising is intermediate in both assertiveness and cooperativeness. When compromising, the objective is to find an expedient, mutually acceptable solution that partially satisfies both parties. Compromising falls on a middle ground between competing and accommodating, giving up more than competing but less than accommodating. Likewise, it addresses an issue more directly than avoiding but doesn’t explore it in as much depth as collaborating. Compromising might mean splitting the difference, exchanging concessions, or seeking a quick middle-ground position."
+    },
+    {
+      "image": {},
+      "name": "Avoiding",
+      "description": "Avoiding is unassertive and uncooperative. When avoiding, an individual does not immediately pursue his or her own concerns or those of the other person. He or she does not address the conflict. Avoiding might take the form of diplomatically sidestepping an issue, postponing an issue until a better time, or simply withdrawing from a threatening situation."
+    },
+    {
+      "image": {},
+      "name": "Accommodating",
+      "description": "Accommodating is unassertive and cooperative—the opposite of competing. When accommodating, an individual neglects his or her own concerns to satisfy the concerns of the other person; there is an element of self-sacrifice in this mode. Accommodating might take the form of selfless generosity or charity, obeying another person’s order when you would prefer not to, or yielding to another’s point of view."
+    }
+  ],
+  "questions": [
+    {
+      "image": {},
+      "answers": [
+        {
+          "image": {},
+          "text": "There are situations when I let others take the responsibility for problem solving.",
+          "personality": "Avoiding"
+        },
+        {
+          "image": {},
+          "text": "In a place of disagreement, I emphasize the points on which we agree.",
+          "personality": "Accommodating"
+        }
+      ],
+      "text": "Please circle either statement A or B for question 1."
+    },
+    {
+      "image": {},
+      "answers": [
+        {
+          "image": {},
+          "text": "If it makes the other person happy, I have no objection to imposing my ideas on him.",
+          "personality": "Accommodating"
+        },
+        {
+          "image": {},
+          "text": "I don't mind if my discussion partner keeps some of his point of view if I can keep some of mine.",
+          "personality": "Compromising"
+        }
+      ],
+      "text": "Please circle either statement A or B for question 18."
+    },
+    {
+      "image": {},
+      "answers": [
+        {
+          "image": {},
+          "text": "I am anxious that all aspects of things, all points of contention, should be explained.",
+          "personality": "Collaborating"
+        },
+        {
+          "image": {},
+          "text": "I will try to postpone the decision until later.",
+          "personality": "Avoiding"
+        }
+      ],
+      "text": "Please circle either statement A or B for question 19."
+    },
+    {
+      "image": {},
+      "answers": [
+        {
+          "image": {},
+          "text": "I try not to hurt the other's feelings.",
+          "personality": "Accommodating"
+        },
+        {
+          "image": {},
+          "text": "I always share my point of view with the other person in order to find a solution.",
+          "personality": "Collaborating"
+        }
+      ],
+      "text": "Please circle either statement A or B for question 30."
+    }
+  ],
+  "startText": "Start",
+  "progressText": "@question of @total",
+  "retakeText": "Retake the quiz",
+  "animation": true,
+  "buttonColor": "1196c8",
+  "progressbarColor": "87e7f4"
+}
