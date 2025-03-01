@@ -1104,65 +1104,25 @@ H5P.TKIQuiz = (function ($, EventDispatcher) {
     };
 
     /**
-     * Crea un template per un evento xAPI, secondo le specifiche ADL.
-     *
-     * @param {string} verb Il verbo da utilizzare per lo statement (es. "completed").
-     * @return {Object} Un oggetto contenente lo statement xAPI.
+     * Crea un oggetto xAPIEvent con struttura standard
+     * @param {string} verb - es: 'answered', 'completed', ...
+     * @returns {H5P.XAPIEvent} evento xAPI
      */
-    self.createXAPIEventTemplate = function(verb) {
-      var statement = {
-        actor: (typeof H5P.getUser === 'function') ? H5P.getUser() : { name: "Anonymous" },
-        verb: {
-          id: "http://adlnet.gov/expapi/verbs/" + verb,
-          display: { "en-US": verb.charAt(0).toUpperCase() + verb.slice(1) }
-        },
-        object: {
-          id: window.location.href,
-          objectType: "Activity",
-          definition: {
-            name: { "en-US": "Personality Quiz" },
-            description: { "en-US": "A personality quiz based on the Thomas-Kilmann Conflict Mode Instrument." }
-          }
-        },
-        result: {
-          score: {
-            raw: 0,
-            min: 0,
-            max: 12
-          },
-          success: true,
-          completion: true,
-          response: "",
-          duration: "PT0S"
-        },
-        context: {
-          contextActivities: {
-            parent: [{
-              id: document.referrer || window.location.href,
-              objectType: "Activity"
-            }]
-          }
-        }
-      };
-    
-      if (typeof H5P.XAPIEvent === "function") {
-        var xAPIEvent = new H5P.XAPIEvent(statement);
-        // Assicuriamoci che l'istanza abbia i metodi richiesti
-        if (typeof xAPIEvent.getVerb !== "function") {
-          xAPIEvent.getVerb = H5P.XAPIEvent.prototype.getVerb;
-        }
-        if (typeof xAPIEvent.getVerifiedStatementValue !== "function") {
-          xAPIEvent.getVerifiedStatementValue = H5P.XAPIEvent.prototype.getVerifiedStatementValue;
-        }
-        if (typeof xAPIEvent.setResult !== "function") {
-          xAPIEvent.setResult = H5P.XAPIEvent.prototype.setResult;
-        }
-        return xAPIEvent;
-      } else {
-        return { data: { statement: statement } };
-      }
-      
-    };    
+    self.createXAPIEventTemplate = function (verb) {
+      // Crea un nuovo xAPIEvent vuoto
+      var xAPIEvent = new H5P.XAPIEvent();
+
+      // Imposta l'attore (lo studente)
+      xAPIEvent.setActor();
+
+      // Imposta il verbo (es: http://adlnet.gov/expapi/verbs/completed)
+      xAPIEvent.setVerb(verb);
+
+      // Imposta l'oggetto = questa istanza content (TKIQuiz)
+      xAPIEvent.setObject(self);
+
+      return xAPIEvent;
+    };      
 
     /**
       Event handler for the personality quiz start event. Makes the
@@ -1205,53 +1165,51 @@ H5P.TKIQuiz = (function ($, EventDispatcher) {
     self.on('personality-quiz-completed', function () {
       self.$progressbar.hide();
       self.completed = true;
-      
+    
       // Mostra la tabella dei risultati
       self.setResultsTable();
-      
-      // Raccogli i raw score per ogni personalità in un oggetto
+    
+      // Calcola punteggi
       var rawScores = {};
       self.personalities.forEach(function(personality) {
         rawScores[personality.name] = personality.count;
       });
-      
-      // Calcola il punteggio globale: la somma dei punteggi delle personalità
+    
       var finalScore = 0;
       self.personalities.forEach(function(personality) {
         finalScore += personality.count;
       });
-      
-      // Salva i dati nell'istanza affinché addResponseToXAPI li possa usare
+    
       self.globalScore = finalScore;
       self.rawScores = rawScores;
-      
-      // Crea lo statement xAPI con il verbo 'completed'
+    
+      // 1. Crea l’evento xAPI con il verbo 'completed'
       var xAPIEvent = self.createXAPIEventTemplate('completed');
-      
-      // Imposta il risultato; se esiste setResult lo usiamo, altrimenti usiamo il ramo else
-      if (typeof xAPIEvent.setResult === 'function') {
-        xAPIEvent.setResult({
-          score: { raw: finalScore, min: 0, max: 30 },
-          extensions: { "https://tuo-dominio.org/extensions/raw-scores": rawScores }
-        });
-      } else if (xAPIEvent.data && xAPIEvent.data.statement) {
-        xAPIEvent.data.statement.result = {
-          score: { raw: finalScore, min: 0, max: 30 },
-          extensions: { "https://tuo-dominio.org/extensions/raw-scores": rawScores }
-        };
+    
+      // 2. Imposta punteggio e completion
+      //    setScoredResult( punteggioAttuale, punteggioMax, istanzaContent, superato/correct? )
+      xAPIEvent.setScoredResult(finalScore, 30, self, true);
+    
+      // 3. Aggiungi estensioni personalizzate (raw scores)
+      //    Se vuoi aggiungere i raw scores, puoi farlo così:
+      var statement = xAPIEvent.data.statement;
+      if (!statement.result.extensions) {
+        statement.result.extensions = {};
       }
-      
-      // Arricchiamo lo statement con le informazioni della domanda e della risposta
+      statement.result.extensions["https://tuo-dominio.org/extensions/raw-scores"] = rawScores;
+    
+      // 4. Aggiungi eventuali definizioni e risposte
       self.addQuestionToXAPI(xAPIEvent);
       self.addResponseToXAPI(xAPIEvent);
-      
-      // Triggeriamo lo statement xAPI usando H5P.trigger per assicurare che Moodle lo catturi
-      H5P.trigger(self, 'xAPI', xAPIEvent);
-      
+    
+      // 5. Trigger finale
+      self.trigger(xAPIEvent);
+    
+      // Effetti di animazione
       if (animation && self.resultAnimation === 'fade-in') {
         self.$result.addClass(prefix('fade-in'));
       }
-    });                  
+    });                              
 
     /**
       Event handler for the animation end event for the wheel of
@@ -1309,18 +1267,14 @@ H5P.TKIQuiz = (function ($, EventDispatcher) {
   };  
   
   TKIQuiz.prototype.addResponseToXAPI = function (xAPIEvent) {
-    var resultData = {
-      score: { raw: this.globalScore, min: 0, max: 30 },
-      extensions: { "https://tuo-dominio.org/extensions/raw-scores": this.rawScores }
-    };
-  
-    if (typeof xAPIEvent.setResult === 'function') {
-      xAPIEvent.setResult(resultData);
+    // Se non vuoi sovrascrivere 'result.score', ma solo aggiungere estensioni,
+    // verifica prima se esiste statement.result.extensions
+    var statement = xAPIEvent.data.statement;
+    if (!statement.result.extensions) {
+      statement.result.extensions = {};
     }
-    else if (xAPIEvent.data && xAPIEvent.data.statement) {
-      xAPIEvent.data.statement.result = resultData;
-    }
-  };  
+    statement.result.extensions["https://tuo-dominio.org/extensions/raw-scores"] = this.rawScores;
+  };    
 
   return TKIQuiz;
 })(H5P.jQuery, H5P.EventDispatcher);

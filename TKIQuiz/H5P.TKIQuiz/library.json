@@ -4,7 +4,7 @@
   "description": "The Thomas-Kilmann Conflict Mode Instrument (TKI) assesses an individual’s behavior in conflict situations.",
   "majorVersion": 1,
   "minorVersion": 0,
-  "patchVersion": 9,
+  "patchVersion": 13,
   "runnable": 1,
   "author": "Daniele Monchiero",
   "license": "MIT",
