@@ -2,6 +2,7 @@
     @namespace H5P
 */
 
+// forse inutile da cancellare poi
 if (typeof H5P.XAPIEvent !== "function") {
   H5P.XAPIEvent = function(statement) {
     this.data = { statement: statement };
@@ -20,6 +21,7 @@ if (typeof H5P.XAPIEvent !== "function") {
     this.data.statement.result = resultData;
   };
 }
+// cancellare fino a qui se non serve a nulla
 
 var H5P = H5P || {};
 
@@ -1163,53 +1165,122 @@ H5P.TKIQuiz = (function ($, EventDispatcher) {
       as completed, calculates the personality and sets the result.
     */
     self.on('personality-quiz-completed', function () {
+      // 1) Nascondi progressbar e segna completato
       self.$progressbar.hide();
       self.completed = true;
     
-      // Mostra la tabella dei risultati
+      // 2) Mostra tabella risultati
       self.setResultsTable();
     
-      // Calcola punteggi
+      // 3) Calcola punteggi
       var rawScores = {};
-      self.personalities.forEach(function(personality) {
+      self.personalities.forEach(function (personality) {
         rawScores[personality.name] = personality.count;
       });
     
       var finalScore = 0;
-      self.personalities.forEach(function(personality) {
+      self.personalities.forEach(function (personality) {
         finalScore += personality.count;
       });
     
       self.globalScore = finalScore;
       self.rawScores = rawScores;
     
-      // 1. Crea l’evento xAPI con il verbo 'completed'
-      var xAPIEvent = self.createXAPIEventTemplate('completed');
-    
-      // 2. Imposta punteggio e completion
-      //    setScoredResult( punteggioAttuale, punteggioMax, istanzaContent, superato/correct? )
-      xAPIEvent.setScoredResult(finalScore, 30, self, true);
-    
-      // 3. Aggiungi estensioni personalizzate (raw scores)
-      //    Se vuoi aggiungere i raw scores, puoi farlo così:
-      var statement = xAPIEvent.data.statement;
-      if (!statement.result.extensions) {
-        statement.result.extensions = {};
+      // 4) Recupera l'ID principale dell'attività e la registration
+      var mainActivityId = self.getActivityXAPIID();
+      if (!self.registrationID) {
+        if (typeof H5P.createUUID === 'function') {
+          self.registrationID = H5P.createUUID();
+        } else {
+          self.registrationID = 'tkiquiz-' + Date.now() + '-' + Math.floor(Math.random()*100000);
+        }
       }
-      statement.result.extensions["https://tuo-dominio.org/extensions/raw-scores"] = rawScores;
     
-      // 4. Aggiungi eventuali definizioni e risposte
-      self.addQuestionToXAPI(xAPIEvent);
-      self.addResponseToXAPI(xAPIEvent);
+      // 5) Per ogni personalità => statement "answered"
+      self.personalities.forEach(function (personality) {
+        // Esempio di sub-ID per questa personalità
+        var subId = mainActivityId + '#style=' + encodeURIComponent(personality.name);
     
-      // 5. Trigger finale
-      self.trigger(xAPIEvent);
+        // a) Crea xAPIEvent con verbo "answered"
+        var answeredEvent = self.createXAPIEventTemplate('answered');
     
-      // Effetti di animazione
-      if (animation && self.resultAnimation === 'fade-in') {
-        self.$result.addClass(prefix('fade-in'));
+        // b) Forza same registration
+        var st = answeredEvent.data.statement;
+        if (!st.context) {
+          st.context = {};
+        }
+        st.context.registration = self.registrationID;
+    
+        // c) Aggiunge un parent = mainActivityId
+        //    Così Moodle sa che questa "sub-attività" appartiene all'attività principale
+        if (!st.context.contextActivities) {
+          st.context.contextActivities = {};
+        }
+        st.context.contextActivities.parent = [{
+          id: mainActivityId,
+          objectType: 'Activity'
+        }];
+    
+        // d) Imposta object.id = subId, ovvero ID specifico per questa personalità
+        st.object.id = subId;
+        st.object.objectType = 'Activity';
+    
+        // e) Definizione minima
+        st.object.definition = {
+          name: { "en-US": personality.name },
+          description: { "en-US": "TKI style: " + personality.name },
+          type: "http://id.tincanapi.com/activitytype/interaction",
+          interactionType: "choice"
+        };
+    
+        // f) punteggio partiale
+        var rawScore = personality.count;
+        var maxScore = 12;
+        answeredEvent.setScoredResult(rawScore, maxScore, self, true);
+    
+        // g) extension con percentuale
+        if (!st.result.extensions) {
+          st.result.extensions = {};
+        }
+        var percentage = Math.round((rawScore / maxScore) * 100);
+        st.result.extensions["https://tuo-dominio.org/extensions/percentile"] = percentage;
+    
+        // h) trigger
+        self.trigger(answeredEvent);
+      });
+    
+      // 6) Crea lo statement "completed" per chiudere il tentativo
+      var completedEvent = self.createXAPIEventTemplate('completed');
+      completedEvent.setContext(self);
+      completedEvent.setObject(self);
+
+      var cst = completedEvent.data.statement;
+      cst.context = cst.context || {};
+      cst.context.registration = self.registrationID;
+
+      // Imposta l'ID principale per lo statement completato
+      cst.object.id = mainActivityId;
+      cst.object.objectType = 'Activity';
+      // Forza la definizione standard per questa attività
+      cst.object.definition = self.getxAPIDefinition();
+
+      // Imposta il punteggio totale
+      completedEvent.setScoredResult(finalScore, 30, self, true);
+
+      // Aggiungi i rawScores totali come extension
+      if (!cst.result.extensions) {
+        cst.result.extensions = {};
       }
-    });                              
+      cst.result.extensions["https://tuo-dominio.org/extensions/raw-scores"] = rawScores;
+
+      // 7) Triggera lo statement "completed"
+      self.trigger(completedEvent);
+    
+      // facoltativo: animazione finale
+      // if (animation && self.resultAnimation === 'fade-in') {
+      //   self.$result.addClass(prefix('fade-in'));
+      // }
+    });                                                   
 
     /**
       Event handler for the animation end event for the wheel of
@@ -1236,6 +1307,18 @@ H5P.TKIQuiz = (function ($, EventDispatcher) {
 
   TKIQuiz.prototype = Object.create(EventDispatcher);
   TKIQuiz.prototype.constructor = TKIQuiz;
+
+  /**
+  * Ritorna l'ID xAPI per questa attività H5P
+  */
+  TKIQuiz.prototype.getActivityXAPIID = function() {
+    // Crea un xAPIEvent e setta l'oggetto su `this`
+    var dummyEvent = this.createXAPIEventTemplate('attempted');
+    dummyEvent.setObject(this);
+
+    // Ora l'ID principale è in dummyEvent.data.statement.object.id
+    return dummyEvent.data.statement.object.id;
+  };
 
   TKIQuiz.prototype.getxAPIDefinition = function () {
     return {
