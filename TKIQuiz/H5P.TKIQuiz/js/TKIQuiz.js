@@ -24,8 +24,7 @@ if (typeof H5P.XAPIEvent !== "function") {
 // cancellare fino a qui se non serve a nulla
 
 var H5P = H5P || {};
-
-
+var domain = window.location.origin;
 
 H5P.TKIQuiz = (function ($, EventDispatcher) {
   /**
@@ -1196,90 +1195,49 @@ H5P.TKIQuiz = (function ($, EventDispatcher) {
         }
       }
     
-      // 5) Per ogni personalità => statement "answered"
+      // 5) Aggrega le risposte e i nomi in stringhe separate
+      var percentageResponses = [];
+      var personalityNames = [];
       self.personalities.forEach(function (personality) {
-        // Esempio di sub-ID per questa personalità
-        var subId = mainActivityId + '#style=' + encodeURIComponent(personality.name);
-    
-        // a) Crea xAPIEvent con verbo "answered"
-        var answeredEvent = self.createXAPIEventTemplate('answered');
-    
-        // b) Forza same registration
-        var st = answeredEvent.data.statement;
-        if (!st.context) {
-          st.context = {};
-        }
-        st.context.registration = self.registrationID;
-    
-        // c) Aggiunge un parent = mainActivityId
-        //    Così Moodle sa che questa "sub-attività" appartiene all'attività principale
-        if (!st.context.contextActivities) {
-          st.context.contextActivities = {};
-        }
-        st.context.contextActivities.parent = [{
-          id: mainActivityId,
-          objectType: 'Activity'
-        }];
-    
-        // d) Imposta object.id = subId, ovvero ID specifico per questa personalità
-        st.object.id = subId;
-        st.object.objectType = 'Activity';
-    
-        // e) Definizione minima
-        st.object.definition = {
-          name: { "en-US": personality.name },
-          description: { "en-US": "TKI style: " + personality.name },
-          type: "http://id.tincanapi.com/activitytype/interaction",
-          interactionType: "choice"
-        };
-    
-        // f) punteggio partiale
         var rawScore = personality.count;
         var maxScore = 12;
-        answeredEvent.setScoredResult(rawScore, maxScore, self, true);
-    
-        // g) extension con percentuale
-        if (!st.result.extensions) {
-          st.result.extensions = {};
-        }
         var percentage = Math.round((rawScore / maxScore) * 100);
-        st.result.extensions["https://tuo-dominio.org/extensions/percentile"] = percentage;
-    
-        // h) trigger
-        self.trigger(answeredEvent);
+        percentageResponses.push(percentage.toString() + '%'); // per l'Attempt answer
+        personalityNames.push(personality.name);               // per la Correct answer
       });
-    
-      // 6) Crea lo statement "completed" per chiudere il tentativo
+      var aggregatedAttempt = percentageResponses.join(' | ');
+      var aggregatedCorrect = personalityNames.join(' | ');
+
+      // 6) Crea lo statement "completed" globale con i valori aggregati
       var completedEvent = self.createXAPIEventTemplate('completed');
       completedEvent.setContext(self);
-      completedEvent.setObject(self);
-
       var cst = completedEvent.data.statement;
       cst.context = cst.context || {};
       cst.context.registration = self.registrationID;
 
-      // Imposta l'ID principale per lo statement completato
       cst.object.id = mainActivityId;
       cst.object.objectType = 'Activity';
-      // Forza la definizione standard per questa attività
       cst.object.definition = self.getxAPIDefinition();
 
-      // Imposta il punteggio totale
+      // Imposta il punteggio totale (global score) se necessario
       completedEvent.setScoredResult(finalScore, 30, self, true);
 
-      // Aggiungi i rawScores totali come extension
+      // Imposta il campo di risposta aggregata: 
+      // "Attempt answer" con i valori percentuali formattati
+      cst.result = cst.result || {};
+      cst.result.response = aggregatedAttempt;
+      // "Correct answer" con i nomi delle personalità
+      cst.object.definition.correctResponsesPattern = [aggregatedCorrect];
+
+      // Aggiungi eventuali estensioni (opzionale)
       if (!cst.result.extensions) {
         cst.result.extensions = {};
       }
-      cst.result.extensions["https://tuo-dominio.org/extensions/raw-scores"] = rawScores;
+      cst.result.extensions[domain + "/extensions/raw-scores"] = rawScores;
 
-      // 7) Triggera lo statement "completed"
+      // Triggera lo statement completed
       self.trigger(completedEvent);
     
-      // facoltativo: animazione finale
-      // if (animation && self.resultAnimation === 'fade-in') {
-      //   self.$result.addClass(prefix('fade-in'));
-      // }
     });                                                   
 
     /**
@@ -1325,11 +1283,11 @@ H5P.TKIQuiz = (function ($, EventDispatcher) {
       name: { "en-US": "TKI Quiz" },
       description: { "en-US": $('<div>' + "A personality quiz based on the Thomas-Kilmann Conflict Mode Instrument." + '</div>').text() },
       type: 'http://adlnet.gov/expapi/activities/cmi.interaction',
-      interactionType: 'choice' // o un tipo specifico se preferisci
-      // Puoi aggiungere altre proprietà se necessario
+      interactionType: 'fill-in', // Adotta fill-in per risposte libere
+      correctResponsesPattern: [] // Non necessario per risposte fill-in
     };
-  };
-
+  };  
+  
   TKIQuiz.prototype.addQuestionToXAPI = function (xAPIEvent) {
     var definition;
     if (typeof xAPIEvent.getVerifiedStatementValue === 'function') {
